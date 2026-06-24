@@ -1,1 +1,2 @@
 # aitesting
+An Ai that taught itself to solve a problem with zero training data!

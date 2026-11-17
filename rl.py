@@ -40,11 +40,13 @@ class RLModel:
             done = False
             while not done:
                 action = self.choose_action(state)
-                next_state, reward, terminated, truncated, info = self.env.step(action)
+                next_state, reward, terminated, truncated, _info = self.env.step(action)
                 done = terminated or truncated
                 if reward == 1.0:
                     wins += 1
-                self.update_qtable(state, action, reward, next_state, done)
+                # Only a real terminal state ends the return; hitting the step
+                # limit (truncation) should still bootstrap from the next state.
+                self.update_qtable(state, action, reward, next_state, terminated)
                 state = next_state
 
             self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
@@ -52,7 +54,35 @@ class RLModel:
                 win_rate = (wins / (episode + 1)) * 100
                 print(f'Episode {episode} - Win rate: {win_rate:.2f}%')
 
+    def evaluate(self, episodes: int = 100) -> float:
+        """Play greedily (no exploration) and return the success rate (0–1)."""
+        wins = 0
+        for _ in range(episodes):
+            state, _info = self.env.reset()
+            done = False
+            while not done:
+                action = int(np.argmax(self.q_table[state]))
+                state, reward, terminated, truncated, _info = self.env.step(action)
+                done = terminated or truncated
+            wins += int(reward == 1.0)
+        return wins / episodes
+
+    def policy_grid(self) -> str:
+        """Render the learned policy as arrows on the 4x4 map."""
+        arrows = ['←', '↓', '→', '↑']
+        desc = self.env.unwrapped.desc.astype(str)
+        rows = []
+        for r, line in enumerate(desc):
+            cells = []
+            for c, tile in enumerate(line):
+                state = r * len(line) + c
+                cells.append(tile if tile in 'HG' else arrows[int(np.argmax(self.q_table[state]))])
+            rows.append(' '.join(cells))
+        return '\n'.join(rows)
+
 
 if __name__ == '__main__':
     rl_model = RLModel()
     rl_model.train()
+    print(f'\nGreedy success rate: {rl_model.evaluate() * 100:.0f}%')
+    print(rl_model.policy_grid())
